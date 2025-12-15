@@ -113,6 +113,7 @@ class InferenceModel(BaseModel):
         self.cfg = cfg
         # TODO: Add FastModel
         self.predict_loader = create_dataloader(cfg.task.data, cfg.dataset, cfg.task.task)
+        self.ema = self.model
 
     def setup(self, stage):
         self.vec2box = create_converter(
