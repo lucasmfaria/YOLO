@@ -1,0 +1,8 @@
+path: data/dataset-listu-flyer-products-v0
+train: train
+validation: val
+
+class_num: 1
+class_list: ['product']
+
+auto_download:
