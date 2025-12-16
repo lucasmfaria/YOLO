@@ -259,7 +259,7 @@ def main():
     parser = argparse.ArgumentParser(description='Convert annotation export to YOLO dataset.')
     parser.add_argument('--json_path', required=True, help='Path to the annotation export (COCO or Label-Studio)')
     parser.add_argument('--output_dir', default='data/custom_dataset', help='Directory to write dataset')
-    parser.add_argument('--val_frac', type=float, default=0.2, help='Validation fraction (default 0.2)')
+    parser.add_argument('--val_frac', type=float, default=0.3, help='Validation fraction (default 0.2)')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for shuffling')
     parser.add_argument('--base_image_dir', default=None, help='Optional base directory to prepend to image file names')
     args = parser.parse_args()

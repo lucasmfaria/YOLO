@@ -54,6 +54,16 @@ pip install -r requirements.txt
 
 These are simple examples. For more customization details, please refer to [Notebooks](examples) and lower-level modifications **[HOWTO](docs/HOWTO.md)**.
 
+## Data annotation
+
+1. Use label-studio (https://labelstud.io/) to label the images for object detection.
+2. Export using the "COCO with Images" format. Unzip it.
+3. Use convert_labelstudio_to_yolo.py to convert to the format expected by the YOLO project. Example:
+
+```shell
+python tools/convert_labelstudio_to_yolo.py --json_path "/home/lucas/VSCodeProjects/YOLO/data/label-studio/coco-format/project-1-at-2025-12-15-16-52-c24975a2/result.json" --output_dir "data/dataset-listu-flyer-products-v0"
+```
+
 ## Training
 
 To train YOLO on your machine/dataset:
@@ -72,6 +82,7 @@ To perform transfer learning with YOLOv9:
 
 ```shell
 python yolo/lazy.py task=train task.data.batch_size=8 model=v9-c dataset={dataset_config} device={cpu, mps, cuda}
+python yolo/lazy.py task=train task.data.batch_size=8 model=v9-c weight=True task.epoch=300 device=cuda name=listu-flyer-products-v0 dataset=listu-flyer-products-v0
 ```
 
 ### Inference
@@ -88,6 +99,7 @@ python yolo/lazy.py task=inference \ # default is inference
                     task.fast_inference=onnx \ # onnx, trt, deploy
                     task.data.source=data/toy/images/train \ # file, dir, webcam
                     +quite=True \ # Quite Output
+python yolo/lazy.py task=inference device=cuda name=listu-flyer-products-v0 weight='/home/lucas/VSCodeProjects/YOLO/runs/train/listu-flyer-products-v0/lightning_logs/version_0/checkpoints/v0.ckpt' task.data.source="/home/lucas/VSCodeProjects/YOLO/data/dataset-listu-flyer-products-v0/images/val/" model=v9-c dataset=listu-flyer-products-v0
 yolo task.data.source={Any Source} # if pip installed
 yolo task=inference task.data.source={Any}
 ```
@@ -99,6 +111,7 @@ To validate model performance, or generate a json file in COCO format:
 ```shell
 python yolo/lazy.py task=validation
 python yolo/lazy.py task=validation dataset=toy
+python yolo/lazy.py task=validation device=cuda name=listu-flyer-products-v0 weight='/home/lucas/VSCodeProjects/YOLO/runs/train/listu-flyer-products-v0/lightning_logs/version_0/checkpoints/v0.ckpt' model=v9-c dataset=listu-flyer-products-v0
 ```
 
 ## Contributing

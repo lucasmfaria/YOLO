@@ -12,11 +12,11 @@ data:
   shuffle: True
   pin_memory: True
   data_augment:
-    Mosaic: 0.1
+    Mosaic: 0.0
     # MixUp: 1
     HorizontalFlip: 0.1
     VerticalFlip: 0.1
-    RandomCrop: 0.1
+    RandomCrop: 0.0
     RemoveOutliers: 1e-8
 
 optimizer:
