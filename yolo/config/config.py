@@ -110,6 +110,12 @@ class NMSConfig:
 
 
 @dataclass
+class TransferConfig:
+    unfreeze_last: int
+    freeze: int = 0
+
+
+@dataclass
 class InferenceConfig:
     task: str
     nms: NMSConfig
@@ -135,6 +141,7 @@ class TrainConfig:
     scheduler: SchedulerConfig
     ema: EMAConfig
     validation: ValidationConfig
+    transfer: "TransferConfig"
 
 
 @dataclass

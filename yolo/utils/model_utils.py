@@ -222,3 +222,118 @@ def predicts_to_json(img_paths, predicts, rev_tensor):
             }
             batch_json.append(bbox)
     return batch_json
+
+
+def freeze_except_last_n(model: torch.nn.Module, n: int, layer_attr: str = "model") -> int:
+    """Freeze all parameters in `model` then unfreeze parameters of the last `n` top-level modules.
+
+    - `layer_attr` is the attribute name on `model` that holds a sequence of top-level modules
+      (commonly `model.model` in YOLO implementations). If not present, falls back to
+      `list(model.children())`.
+    - Returns the number of parameters that were set to `requires_grad=True`.
+    """
+    # Freeze all params first
+    for p in model.parameters():
+        p.requires_grad = False
+
+    # Collect top-level modules
+    modules_list = None
+    if hasattr(model, layer_attr):
+        modules = getattr(model, layer_attr)
+        try:
+            modules_list = list(modules)
+        except TypeError:
+            modules_list = [modules]
+    else:
+        modules_list = list(model.children())
+
+    if n <= 0:
+        return 0
+
+    if n >= len(modules_list):
+        # Unfreeze everything
+        count = 0
+        for p in model.parameters():
+            p.requires_grad = True
+            count += 1
+        return count
+
+    # Unfreeze last n modules
+    count = 0
+    for m in modules_list[-n:]:
+        for p in m.parameters():
+            if not p.requires_grad:
+                p.requires_grad = True
+                count += 1
+    return count
+
+
+def apply_transfer_freeze(
+    model: torch.nn.Module, freeze_first: int = 0, unfreeze_last: int = 0, layer_attr: str = "model"
+) -> dict:
+    """Apply transfer learning freezing strategy.
+
+    Precedence: if `unfreeze_last > 0`, we freeze all parameters then unfreeze the last
+    `unfreeze_last` modules. Otherwise, if `freeze_first > 0`, we ensure parameters are
+    trainable then freeze the first `freeze_first` modules.
+
+    Returns a dict with counts: `{"frozen": int, "unfrozen": int}`.
+    """
+    # Collect top-level modules
+    if hasattr(model, layer_attr):
+        modules = getattr(model, layer_attr)
+        try:
+            modules_list = list(modules)
+        except TypeError:
+            modules_list = [modules]
+    else:
+        modules_list = list(model.children())
+
+    total_params = sum(1 for _ in model.parameters())
+
+    # Case 1: unfreeze_last has priority
+    if unfreeze_last and unfreeze_last > 0:
+        for p in model.parameters():
+            p.requires_grad = False
+
+        if unfreeze_last >= len(modules_list):
+            # unfreeze all params
+            count_unfrozen = 0
+            for p in model.parameters():
+                p.requires_grad = True
+                count_unfrozen += 1
+            return {"frozen": total_params - count_unfrozen, "unfrozen": count_unfrozen}
+
+        count_unfrozen = 0
+        for m in modules_list[-unfreeze_last:]:
+            for p in m.parameters():
+                if not p.requires_grad:
+                    p.requires_grad = True
+                    count_unfrozen += 1
+        return {"frozen": total_params - count_unfrozen, "unfrozen": count_unfrozen}
+
+    # Case 2: freeze_first
+    if freeze_first and freeze_first > 0:
+        # ensure all trainable first
+        for p in model.parameters():
+            p.requires_grad = True
+
+        if freeze_first >= len(modules_list):
+            # freeze everything
+            count_frozen = 0
+            for p in model.parameters():
+                p.requires_grad = False
+                count_frozen += 1
+            return {"frozen": count_frozen, "unfrozen": total_params - count_frozen}
+
+        count_frozen = 0
+        for m in modules_list[:freeze_first]:
+            for p in m.parameters():
+                if p.requires_grad:
+                    p.requires_grad = False
+                    count_frozen += 1
+        return {"frozen": count_frozen, "unfrozen": total_params - count_frozen}
+
+    # Default: no changes
+    unfrozen = sum(1 for p in model.parameters() if p.requires_grad)
+    return {"frozen": total_params - unfrozen, "unfrozen": unfrozen}

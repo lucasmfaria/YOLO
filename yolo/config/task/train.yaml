@@ -53,3 +53,7 @@ scheduler:
 ema:
   enable: true
   decay: 0.9999
+
+transfer:
+  freeze: 0
+  unfreeze_last: 0

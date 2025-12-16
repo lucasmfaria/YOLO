@@ -11,6 +11,7 @@ from yolo.tools.drawer import draw_bboxes
 from yolo.tools.loss_functions import create_loss_function
 from yolo.utils.bounding_box_utils import create_converter, to_metrics_format
 from yolo.utils.model_utils import PostProcess, create_optimizer, create_scheduler
+from yolo.utils.model_utils import apply_transfer_freeze
 
 
 class BaseModel(LightningModule):
@@ -68,6 +69,18 @@ class ValidateModel(BaseModel):
 class TrainModel(ValidateModel):
     def __init__(self, cfg: Config):
         super().__init__(cfg)
+        # Apply transfer-learning freezing per config: freeze first N or unfreeze last N.
+        transfer_cfg = getattr(cfg.task, "transfer", None) or getattr(cfg, "transfer", None)
+        try:
+            freeze_n = int(getattr(transfer_cfg, "freeze", 0)) if transfer_cfg is not None else 0
+            unfreeze_n = int(getattr(transfer_cfg, "unfreeze_last", 0)) if transfer_cfg is not None else 0
+        except Exception:
+            freeze_n, unfreeze_n = 0, 0
+
+        result = apply_transfer_freeze(self.model, freeze_first=freeze_n, unfreeze_last=unfreeze_n, layer_attr="model")
+        # Ensure at least one parameter is trainable
+        if result.get("unfrozen", 0) == 0:
+            raise ValueError(f"No trainable parameters after applying transfer config: freeze={freeze_n}, unfreeze_last={unfreeze_n}")
         self.cfg = cfg
         self.train_loader = create_dataloader(self.cfg.task.data, self.cfg.dataset, self.cfg.task.task)
 
