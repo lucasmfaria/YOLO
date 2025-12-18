@@ -57,3 +57,15 @@ ema:
 transfer:
   freeze: 0
   unfreeze_last: 0
+
+# Early stopping configuration (defaults: disabled)
+early_stop:
+  enable: true                    # set true to enable EarlyStopping
+  monitor: mar_100                     # metric name to monitor (ValidateModel logs `map`)
+  mode: max                        # 'max' because higher mAP is better
+  patience: 40                     # epochs with no improvement before stopping
+  min_delta: 0.0                   # minimum change to qualify as improvement
+  strict: true                    # don't error if metric missing
+  verbose: true                   # EarlyStopping verbosity
+  check_on_train_epoch_end: false  # check on train epoch end as well
+  

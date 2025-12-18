@@ -21,7 +21,7 @@ import numpy as np
 import torch
 import wandb
 from lightning import LightningModule, Trainer, seed_everything
-from lightning.pytorch.callbacks import Callback, RichModelSummary, RichProgressBar
+from lightning.pytorch.callbacks import Callback, RichModelSummary, RichProgressBar, EarlyStopping
 from lightning.pytorch.callbacks.progress.rich_progress import CustomProgress
 from lightning.pytorch.loggers import TensorBoardLogger, WandbLogger
 from lightning.pytorch.utilities import rank_zero_only
@@ -282,6 +282,38 @@ def setup(cfg: Config):
     progress.append(YOLORichProgressBar())
     progress.append(YOLORichModelSummary())
     progress.append(ImageLogger())
+    # EarlyStopping: monitor validation metric (default: `map`)
+    if hasattr(cfg.task, "early_stop") and getattr(cfg.task.early_stop, "enable", False):
+        es = cfg.task.early_stop
+        try:
+            monitor = getattr(es, "monitor", "map")
+            mode = getattr(es, "mode", "max")
+            patience = int(getattr(es, "patience", 10))
+            min_delta = float(getattr(es, "min_delta", 0.0))
+            strict = bool(getattr(es, "strict", False))
+            verbose = bool(getattr(es, "verbose", False))
+            check_on_train_epoch_end = bool(getattr(es, "check_on_train_epoch_end", False))
+        except Exception:
+            monitor, mode, patience, min_delta, strict, verbose, check_on_train_epoch_end = (
+                "map",
+                "max",
+                10,
+                0.0,
+                False,
+                False,
+                False,
+            )
+        progress.append(
+            EarlyStopping(
+                monitor=monitor,
+                mode=mode,
+                patience=patience,
+                min_delta=min_delta,
+                strict=strict,
+                verbose=verbose,
+                check_on_train_epoch_end=check_on_train_epoch_end,
+            )
+        )
     if cfg.use_tensorboard:
         loggers.append(TensorBoardLogger(log_graph="all", save_dir=save_path))
     if cfg.use_wandb:
