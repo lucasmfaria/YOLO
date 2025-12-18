@@ -7,7 +7,7 @@ antlr4-python3-runtime==4.9.3
 asttokens
 attrs
 certifi
-charset-normalizer==3.4.4
+charset-normalizer
 click==8.3.1
 comm==0.2.3
 debugpy==1.8.17
