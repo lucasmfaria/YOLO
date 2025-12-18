@@ -6,7 +6,7 @@ annotated-types==0.7.0
 antlr4-python3-runtime==4.9.3
 asttokens
 attrs
-certifi==2025.11.12
+certifi
 charset-normalizer==3.4.4
 click==8.3.1
 comm==0.2.3
