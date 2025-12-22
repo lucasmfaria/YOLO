@@ -12,6 +12,9 @@ from yolo.tools.loss_functions import create_loss_function
 from yolo.utils.bounding_box_utils import create_converter, to_metrics_format
 from yolo.utils.model_utils import PostProcess, create_optimizer, create_scheduler
 from yolo.utils.model_utils import apply_transfer_freeze
+from PIL import Image
+import numpy as _np
+import torch as _torch
 
 
 class BaseModel(LightningModule):
@@ -147,9 +150,147 @@ class InferenceModel(BaseModel):
             fps = None
         if getattr(self.cfg.task, "save_predict", None):
             self._save_image(img, batch_idx)
+        if getattr(self.cfg.task, "return_detections", None):  # returns cropped detection images as PIL Images
+            img_list = self._crop_detections(origin_frame, predicts)
+            return img_list, fps
         return img, fps
 
     def _save_image(self, img, batch_idx):
         save_image_path = Path(self.trainer.default_root_dir) / f"frame{batch_idx:03d}.png"
         img.save(save_image_path)
         print(f"💾 Saved visualize image at {save_image_path}")
+
+    def _crop_detections(self, origin_frame, predicts):
+        """Crop detected boxes from the original image(s).
+
+        Args:
+            origin_frame: PIL.Image or numpy array or list/tuple of images corresponding to the batch.
+            predicts: A prediction object or a list of prediction dicts. Each prediction dict is expected
+                to contain a box tensor/array under one of the common keys: 'boxes', 'bboxes', or 'bbox',
+                and a label under 'labels' or 'classes'. Boxes are expected in xyxy format.
+
+        Returns:
+            List[dict]: Each dict has keys 'image' (PIL.Image cropped region) and 'class' (label name).
+        """
+        results = []
+
+        # Normalize origin_frame to list for easier handling
+        if isinstance(origin_frame, (list, tuple)):
+            origin_images = list(origin_frame)
+        else:
+            origin_images = [origin_frame]
+
+        # Normalize predicts to list
+        predict_list = predicts if isinstance(predicts, (list, tuple)) else [predicts]
+
+        for img_idx, pred in enumerate(predict_list):
+            # Select the matching origin image (if fewer provided, reuse the first)
+            orig = origin_images[img_idx] if img_idx < len(origin_images) else origin_images[0]
+
+            # Convert origin to PIL.Image if needed
+            if isinstance(orig, _np.ndarray):
+                pil_img = Image.fromarray(orig)
+            elif hasattr(orig, "cpu") and isinstance(orig, _torch.Tensor):
+                arr = orig.detach().cpu().numpy()
+                # If tensor shape is (C,H,W) convert to HWC
+                if arr.ndim == 3 and arr.shape[0] in (1, 3):
+                    arr = _np.transpose(arr, (1, 2, 0))
+                pil_img = Image.fromarray(arr.astype(_np.uint8))
+            elif isinstance(orig, Image.Image):
+                pil_img = orig
+            else:
+                # Fallback: try to convert via numpy
+                try:
+                    arr = _np.asarray(orig)
+                    pil_img = Image.fromarray(arr.astype(_np.uint8))
+                except Exception:
+                    continue
+
+
+            # Predictions from bbox_nms are typically a Tensor [N x 6]:
+            # [class, x1, y1, x2, y2, conf]. The post-process also may return a dict/list.
+            boxes_arr = None
+            labels_arr = None
+
+            # If prediction is a dict with conventional keys
+            if isinstance(pred, dict):
+                for key in ("boxes", "bboxes", "bbox"):
+                    if key in pred:
+                        boxes_arr = pred[key]
+                        break
+                for key in ("labels", "classes", "class"):
+                    if key in pred:
+                        labels_arr = pred[key]
+                        break
+
+            # If prediction is a tensor/ndarray with rows [cls, x1, y1, x2, y2, conf]
+            if boxes_arr is None and isinstance(pred, (_torch.Tensor, _np.ndarray)):
+                pred_arr = pred
+                if isinstance(pred_arr, _torch.Tensor):
+                    pred_arr = pred_arr.detach().cpu().numpy()
+                pred_arr = _np.asarray(pred_arr)
+                if pred_arr.size == 0:
+                    continue
+                # Extract boxes and labels
+                if pred_arr.shape[1] >= 5:
+                    boxes_arr = pred_arr[:, 1:5]
+                    labels_arr = pred_arr[:, 0]
+                else:
+                    # Unexpected shape, skip
+                    continue
+
+            # Convert boxes/labels to numpy arrays if they are tensors or lists
+            if boxes_arr is None:
+                continue
+            if hasattr(boxes_arr, "cpu") and isinstance(boxes_arr, _torch.Tensor):
+                boxes_arr = boxes_arr.detach().cpu().numpy()
+            else:
+                boxes_arr = _np.asarray(boxes_arr)
+
+            if labels_arr is None:
+                labels_arr = [None] * len(boxes_arr)
+            else:
+                if hasattr(labels_arr, "cpu") and isinstance(labels_arr, _torch.Tensor):
+                    labels_arr = labels_arr.detach().cpu().numpy()
+                else:
+                    labels_arr = _np.asarray(labels_arr)
+
+            # For each detection, crop and add to results
+            for i, box in enumerate(boxes_arr):
+                try:
+                    x1, y1, x2, y2 = [int(round(float(v))) for v in box[:4]]
+                except Exception:
+                    continue
+
+                # Clamp coordinates to image bounds
+                w, h = pil_img.size
+                x1 = max(0, min(x1, w - 1))
+                x2 = max(0, min(x2, w))
+                y1 = max(0, min(y1, h - 1))
+                y2 = max(0, min(y2, h))
+
+                if x2 <= x1 or y2 <= y1:
+                    continue
+
+                cropped = pil_img.crop((x1, y1, x2, y2))
+
+                # Resolve class name
+                cls_name = None
+                label_val = labels_arr[i] if len(labels_arr) > i else None
+                if label_val is None:
+                    cls_name = None
+                else:
+                    # If label is numeric index, map via dataset class list when available
+                    try:
+                        idx = int(label_val)
+                        cls_list = getattr(self.cfg.dataset, "class_list", None)
+                        if cls_list and 0 <= idx < len(cls_list):
+                            cls_name = cls_list[idx]
+                        else:
+                            cls_name = str(idx)
+                    except Exception:
+                        cls_name = str(label_val)
+
+                results.append({"image": cropped, "class": cls_name})
+
+        return results

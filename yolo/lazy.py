@@ -44,8 +44,8 @@ def main(cfg: Config):
             model = InferenceModel.load_from_checkpoint(cfg.weight, cfg=cfg)
         else:
             model = InferenceModel(cfg)
-        trainer.predict(model)
-
+        preds = trainer.predict(model)
+        return preds
 
 if __name__ == "__main__":
     main()

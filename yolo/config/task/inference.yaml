@@ -10,3 +10,4 @@ nms:
   min_iou: 0.5
   max_bbox: 500
 save_predict: True
+return_detections: False  # returns cropped detection images as PIL Images
