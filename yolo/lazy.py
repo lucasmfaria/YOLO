@@ -34,14 +34,14 @@ def main(cfg: Config):
         model = TrainModel(cfg)
         trainer.fit(model)
     if cfg.task.task == "validation":
-        if 'ckpt' in cfg.weight:
-            model = ValidateModel.load_from_checkpoint(cfg.weight, cfg=cfg)
+        if isinstance(cfg.weight, str):
+            model = ValidateModel.load_from_checkpoint(cfg.weight, cfg=cfg) if 'ckpt' in cfg.weight else ValidateModel(cfg)
         else:
             model = ValidateModel(cfg)
         trainer.validate(model)
     if cfg.task.task == "inference":
-        if 'ckpt' in cfg.weight:
-            model = InferenceModel.load_from_checkpoint(cfg.weight, cfg=cfg)
+        if isinstance(cfg.weight, str):
+            model = InferenceModel.load_from_checkpoint(cfg.weight, cfg=cfg) if 'ckpt' in cfg.weight else InferenceModel(cfg)
         else:
             model = InferenceModel(cfg)
         preds = trainer.predict(model)
