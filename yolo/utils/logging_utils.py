@@ -68,7 +68,10 @@ class YOLORichProgressBar(RichProgressBar):
             self._reset_progress_bar_ids()
             reconfigure(**self._console_kwargs)
             self._console = Console()
-            self._console.clear_live()
+            try:
+                self._console.clear_live()
+            except Exception as e:
+                pass
             self.progress = YOLOCustomProgress(
                 *self.configure_columns(trainer),
                 auto_refresh=False,
