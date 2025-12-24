@@ -61,11 +61,12 @@ transfer:
 # Early stopping configuration (defaults: disabled)
 early_stop:
   enable: true                    # set true to enable EarlyStopping
-  monitor: mar_100                     # metric name to monitor (ValidateModel logs `map`)
+  monitor: mar_10                     # metric name to monitor (ValidateModel logs `map`)
   mode: max                        # 'max' because higher mAP is better
-  patience: 40                     # epochs with no improvement before stopping
+  patience: 50                     # epochs with no improvement before stopping
   min_delta: 0.0                   # minimum change to qualify as improvement
   strict: true                    # don't error if metric missing
   verbose: true                   # EarlyStopping verbosity
   check_on_train_epoch_end: false  # check on train epoch end as well
+  filename: "v{version}-epoch={epoch:02d}-mar_10={mar_10:.4f}-mar_100={mar_100:.4f}-map={map:.4f}"
   

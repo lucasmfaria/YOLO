@@ -15,13 +15,20 @@ import logging
 from collections import deque
 from logging import FileHandler
 from pathlib import Path
+import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 import wandb
 from lightning import LightningModule, Trainer, seed_everything
-from lightning.pytorch.callbacks import Callback, RichModelSummary, RichProgressBar, EarlyStopping
+from lightning.pytorch.callbacks import (
+    Callback,
+    RichModelSummary,
+    RichProgressBar,
+    EarlyStopping,
+    ModelCheckpoint,
+)
 from lightning.pytorch.callbacks.progress.rich_progress import CustomProgress
 from lightning.pytorch.loggers import TensorBoardLogger, WandbLogger
 from lightning.pytorch.utilities import rank_zero_only
@@ -296,6 +303,23 @@ def setup(cfg: Config):
             strict = bool(getattr(es, "strict", False))
             verbose = bool(getattr(es, "verbose", False))
             check_on_train_epoch_end = bool(getattr(es, "check_on_train_epoch_end", False))
+            cp_filename = getattr(es, "filename", None)
+            # validate monitor name is a safe python identifier for format fields
+            monitor_str = str(monitor)
+            is_valid_monitor = re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", monitor_str) is not None
+            if not cp_filename:
+                if is_valid_monitor:
+                    # build a filename template that uses the configured monitor metric
+                    # e.g. monitor='mar_10' -> 'v{version}-epoch={epoch:02d}-mar_10={mar_10:.4f}'
+                    cp_filename = "v{version}-epoch={epoch:02d}-" + monitor_str + "={" + monitor_str + ":.4f}"
+                else:
+                    logger.warning(
+                        "EarlyStopping monitor name '%s' is not a valid format field name; "
+                        "please set `early_stop.filename` in config to include a valid metric key. "
+                        "Falling back to filename without metric.",
+                        monitor_str,
+                    )
+                    cp_filename = "v{version}-epoch={epoch:02d}"
         except Exception:
             monitor, mode, patience, min_delta, strict, verbose, check_on_train_epoch_end = (
                 "map",
@@ -306,6 +330,8 @@ def setup(cfg: Config):
                 False,
                 False,
             )
+            # fallback default (shouldn't usually hit because monitor is set above)
+            cp_filename = "v{version}-epoch={epoch:02d}-" + str(monitor) + "={" + str(monitor) + ":.4f}"
         progress.append(
             EarlyStopping(
                 monitor=monitor,
@@ -317,6 +343,22 @@ def setup(cfg: Config):
                 check_on_train_epoch_end=check_on_train_epoch_end,
             )
         )
+        # Also add a ModelCheckpoint callback so the best model (by monitored metric) is saved
+        try:
+            ckpt_dir = Path(save_path) / "checkpoints"
+            ckpt_dir.mkdir(parents=True, exist_ok=True)
+            progress.append(
+                ModelCheckpoint(
+                    monitor=monitor,
+                    mode=mode,
+                    save_top_k=1,
+                    save_last=True,
+                    filename=cp_filename,
+                    dirpath=str(ckpt_dir),
+                )
+            )
+        except Exception:
+            logger.warning("Could not create ModelCheckpoint callback; continuing without checkpointing.")
     if cfg.use_tensorboard:
         loggers.append(TensorBoardLogger(log_graph="all", save_dir=save_path))
     if cfg.use_wandb:
